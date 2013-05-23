@@ -1,0 +1,57 @@
+#####################
+###   Variables   ###
+#####################
+
+# Interfaces
+
+ext_if="vlan1"
+ext_ip="1.2.3.4"
+
+int_if="vlan2"
+int_ip="10.10.10.1"
+
+#####################
+###     Rules     ###
+#####################
+
+${FW} -f flush
+
+# Loopback interface
+
+${FW} add pass all from any to any via lo0
+${FW} add deny all from any to 127.0.0.0/8
+${FW} add deny all from 127.0.0.0/8 to any
+
+# Block unwanted nets
+
+${FW} add deny all from any to "table(1)"
+${FW} add deny all from "table(1)" to any
+
+# Common rules
+
+${FW} add pass tcp from any to any established			// TCP
+${FW} add pass icmp from any to any icmptypes 0,3,4,8,11	// Ping etc
+${FW} add unreach port udp from any to me 33434-33524		// Traceroute
+${FW} add check-state						// UDP
+
+# Allow all connections from our server
+
+${FW} add pass tcp from me to any setup
+${FW} add pass udp from me to any keep-state
+
+# Services on our server
+
+${FW} add pass tcp from any to me 25				// SMTP
+${FW} add pass tcp from any to me 53				// DNS
+${FW} add pass udp from any to me 53				// DNS
+${FW} add pass tcp from any to me 80				// HTTP
+
+# Get rid of garbage in log
+
+${FW} add deny tcp from any to any 135,137-139,445 via ${ext_if}	// M$
+${FW} add deny udp from any to any 135,137-139,445 via ${ext_if}	// M$
+#${FW} add deny udp from any to any dst-port 67,68			// DHCP
+
+# Log anything else
+
+${FW} add deny log ip from any to any

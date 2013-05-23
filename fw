@@ -1,0 +1,68 @@
+#!/bin/sh
+
+dir=`dirname $0`
+name=`basename $0`
+all="yes"
+#list="1 2 3 4 5"
+list="1"
+
+while [ "$1" ]; do
+  case "$1" in
+    -h) shift; help="yes" ;;
+    -n) shift; test="yes" ;;
+    -r) shift; unset all; rules="yes" ;;
+    -t) shift; unset all; tables="yes";
+        if [ "${1%%-*}" ]; then list=$1; shift; fi ;;
+     *) echo "Error! Unknown option: $1, exit for safety..."; exit 1 ;;
+  esac
+done
+
+if [ "$help" ]; then
+  echo "Usage: $name [-h] [-n] [-r] [-t [<list of tables>]]"
+  echo "  -h	Show this help and exit"
+  echo "  -n	Dry run: just check a syntax"
+  echo "  -r	Reload rules"
+  echo "  -t	Reload tables (all or from specifyed list)"
+  exit
+fi
+
+if [ "$test" ]; then
+  FW="/sbin/ipfw -n"
+else
+  FW="/sbin/ipfw -q -n"
+fi
+
+if [ "$all" -o "$tables" ]; then
+  for t in $list; do
+    f="$dir/$name.table$t"
+    if [ -r $f ]; then
+      $FW table $t flush
+      for i in `sed 's/#.*//' $f`; do
+        ${FW} table $t add $i;
+        if [ "$test" -a $? -ne 0 ]; then
+          echo "Error! Fix addresses in table $t!"
+          exit
+        fi
+      done
+    else
+      echo "Error! Cannot open file: $f!"
+    fi
+  done
+fi
+
+if [ "$all" -o "$rules" ]; then
+  f="$dir/$name.rules"
+  if [ -r $f ]; then
+    $FW set disable 0
+    $FW delete set 0
+    export FW
+    /bin/sh -e $f
+    if [ $? -eq 0 ]; then
+      $FW set swap 0 1
+    else
+      echo "Error! Fix syntax/rules in your script!"
+    fi
+  else
+    echo "Error! Cannot open file: $f!"
+  fi
+fi
