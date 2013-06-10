@@ -29,7 +29,7 @@ fi
 if [ "$test" ]; then
   FW="/sbin/ipfw -n"
 else
-  FW="/sbin/ipfw -q -n"
+  FW="/sbin/ipfw -q"
 fi
 
 if [ "$all" -o "$tables" ]; then
