@@ -1,30 +1,37 @@
 #!/bin/sh
 
-dir=`dirname $0`
-name=`basename $0`
+sec="30"
 all="yes"
-#list="1 2 3 4 5"
 list="1"
+#lst="1 2 3 4 5"
+
+errorexit () {
+  echo "Error!" $1; exit $2
+}
+
+printhelp () {
+  echo "Usage:" `basename $0` "[-r] [-t [<list of tables>]] [-n] [-s] [-w] [-h]"
+  echo "  -r	Reload rules"
+  echo "  -t	Reload tables (all or from specifyed list)"
+  echo "  -n	Dry run: just check a syntax"
+  echo "  -s	Show commands instead of executing them"
+  echo "  -w	Wait some time after loading new rules"
+  echo "  -h	Show this help and exit"
+  exit
+}
 
 while [ "$1" ]; do
   case "$1" in
-    -h) shift; help="yes" ;;
-    -n) shift; test="yes" ;;
     -r) shift; unset all; rules="yes" ;;
     -t) shift; unset all; tables="yes";
         if [ "${1%%-*}" ]; then list=$1; shift; fi ;;
-     *) echo "Error! Unknown option: $1, exit for safety..."; exit 1 ;;
+    -n) shift; test="yes" ;;
+    -s) shift; show="yes" ;;
+    -w) shift; wait="yes" ;;
+    -h) shift; printhelp ;;
+     *) errorexit "Unknown option: $1, exit for safety..." 1 ;;
   esac
 done
-
-if [ "$help" ]; then
-  echo "Usage: $name [-h] [-n] [-r] [-t [<list of tables>]]"
-  echo "  -h	Show this help and exit"
-  echo "  -n	Dry run: just check a syntax"
-  echo "  -r	Reload rules"
-  echo "  -t	Reload tables (all or from specifyed list)"
-  exit
-fi
 
 if [ "$test" ]; then
   FW="/sbin/ipfw -n"
@@ -32,37 +39,50 @@ else
   FW="/sbin/ipfw -q"
 fi
 
+if [ "$show" ]; then
+  FW="echo $FW"
+fi
+
 if [ "$all" -o "$tables" ]; then
   for t in $list; do
-    f="$dir/$name.table$t"
+    f="$0.table$t"
     if [ -r $f ]; then
       $FW table $t flush
       for i in `sed 's/#.*//' $f`; do
         ${FW} table $t add $i;
         if [ "$test" -a $? -ne 0 ]; then
-          echo "Error! Fix addresses in table $t!"
-          exit
+          errorexit "Fix the line '$i' in the $0.table$t file!" 2
         fi
       done
     else
-      echo "Error! Cannot open file: $f!"
+      errorexit "Cannot open file: $f!" 3
     fi
   done
 fi
 
 if [ "$all" -o "$rules" ]; then
-  f="$dir/$name.rules"
+  f="$0.rules"
   if [ -r $f ]; then
     $FW set disable 0
     $FW delete set 0
     export FW
     /bin/sh -e $f
     if [ $? -eq 0 ]; then
-      $FW set swap 0 1
+      if [ ! "$test" ]; then
+        trap "$FW set swap 0 1; echo 'Got a trap: undo a changes.'; exit 4" HUP INT
+        $FW set swap 0 1
+        if [ "$wait" ]; then
+          echo "Waiting for a $sec seconds to be sure everything is OK."
+          echo "Press Ctrl-C if you want to revert the changes..."
+          sleep $sec
+          echo "Time is up."
+        fi
+        trap HUP INT
+      fi
     else
-      echo "Error! Fix syntax/rules in your script!"
+      errorexit "Fix syntax/rules in your script!" 5
     fi
   else
-    echo "Error! Cannot open file: $f!"
+    errorexit "Cannot open file: $f!" 6
   fi
 fi
