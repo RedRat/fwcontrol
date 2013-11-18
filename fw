@@ -1,16 +1,24 @@
 #!/bin/sh
 
-sec="30"
+#####################
+###   Defaults    ###
+#####################
+
 all="yes"
+sec="30"
 list="1"
 #lst="1 2 3 4 5"
+
+#####################
+###   Functions   ###
+#####################
 
 errorexit () {
   echo "Error!" $1; exit $2
 }
 
 printhelp () {
-  echo "Usage:" `basename $0` "[-r] [-t [<list of tables>]] [-n] [-s] [-w] [-h]"
+  echo "Usage:" `basename $0` "[-r] [-t [<list of tables>]] [-n] [-s] [-w [<seconds>]] [-h]"
   echo "  -r	Reload rules"
   echo "  -t	Reload tables (all or from specifyed list)"
   echo "  -n	Dry run: just check a syntax"
@@ -20,14 +28,31 @@ printhelp () {
   exit
 }
 
+#####################
+###  Parameters   ###
+#####################
+
 while [ "$1" ]; do
   case "$1" in
     -r) shift; unset all; rules="yes" ;;
     -t) shift; unset all; tables="yes";
-        if [ "${1%%-*}" ]; then list=$1; shift; fi ;;
+        if [ "${1%%-*}" ]; then
+          case $1 in
+            *[!0-9' ']*) errorexit "Wrong character in the -t parameter!" 7 ;;
+            *) list=$1 ;;
+          esac
+          shift;
+        fi ;;
     -n) shift; test="yes" ;;
     -s) shift; show="yes" ;;
-    -w) shift; wait="yes" ;;
+    -w) shift; wait="yes";
+        if [ "${1%%-*}" ]; then
+          case $1 in
+            *[!0-9]*) errorexit "Wrong character in the -w parameter!" 8 ;;
+            *) sec=$1 ;;
+          esac
+          shift;
+        fi ;;
     -h) shift; printhelp ;;
      *) errorexit "Unknown option: $1, exit for safety..." 1 ;;
   esac
@@ -42,6 +67,10 @@ fi
 if [ "$show" ]; then
   FW="echo $FW"
 fi
+
+#####################
+###    Tables     ###
+#####################
 
 if [ "$all" -o "$tables" ]; then
   for t in $list; do
@@ -59,6 +88,10 @@ if [ "$all" -o "$tables" ]; then
     fi
   done
 fi
+
+#####################
+###     Rules     ###
+#####################
 
 if [ "$all" -o "$rules" ]; then
   f="$0.rules"
